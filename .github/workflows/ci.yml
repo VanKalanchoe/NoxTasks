@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    name: Windows x64 (${{ matrix.config }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [ Debug, Release ]
+
+    steps:
+      - name: Checkout NoxTasks
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies (Taskflow)
+        shell: cmd
+        run: |
+          if not exist vendors mkdir vendors
+          git clone --depth 1 https://github.com/taskflow/taskflow.git vendors\taskflow
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 `
+            -DNOXTASKS_BUILD_EXAMPLES=ON `
+            -DNOXTASKS_BUILD_TESTS=ON
+
+      - name: Build (${{ matrix.config }})
+        shell: pwsh
+        run: |
+          cmake --build build --config ${{ matrix.config }} --parallel
+
+      - name: Run NoxTasksTest
+        shell: pwsh
+        run: |
+          ./build/${{ matrix.config }}/NoxTasksTest.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run TasksDemo
+        shell: pwsh
+        run: |
+          ./build/${{ matrix.config }}/TasksDemo.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
